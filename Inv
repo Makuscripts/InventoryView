@@ -1,0 +1,256 @@
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local Player = Players.LocalPlayer
+local Backpack = Player:WaitForChild("Backpack")
+
+--// UI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PetTrackerUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = Player:WaitForChild("PlayerGui")
+
+-- Main Container
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 380, 0, 500)
+mainFrame.Position = UDim2.new(0.5, -190, 0.5, -250)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+mainFrame.Parent = screenGui
+mainFrame.BackgroundTransparency = 0
+mainFrame.Visible = true
+mainFrame.AutoLocalize = false
+mainFrame.Name = "MainFrame"
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+mainFrame.Round = UDim.new(0, 15)
+
+-- Gradient Header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 50)
+header.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
+header.Parent = mainFrame
+
+local headerGradient = Instance.new("UIGradient")
+headerGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,128)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255,128,0))}
+headerGradient.Parent = header
+
+local headerLabel = Instance.new("TextLabel")
+headerLabel.Size = UDim2.new(1, -20, 1, 0)
+headerLabel.Position = UDim2.new(0, 10, 0, 0)
+headerLabel.BackgroundTransparency = 1
+headerLabel.Text = "Pet Tracker"
+headerLabel.TextScaled = true
+headerLabel.Font = Enum.Font.GothamBold
+headerLabel.TextColor3 = Color3.fromRGB(255,255,255)
+headerLabel.Parent = header
+
+-- Info Labels
+local playerNameLabel = Instance.new("TextLabel")
+playerNameLabel.Position = UDim2.new(0, 10, 0, 60)
+playerNameLabel.Size = UDim2.new(0, 200, 0, 25)
+playerNameLabel.BackgroundTransparency = 1
+playerNameLabel.Text = "Player: "..Player.Name
+playerNameLabel.TextColor3 = Color3.fromRGB(255,255,255)
+playerNameLabel.Font = Enum.Font.Gotham
+playerNameLabel.TextScaled = true
+playerNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+playerNameLabel.Parent = mainFrame
+
+local lastReceivedLabel = Instance.new("TextLabel")
+lastReceivedLabel.Position = UDim2.new(0, 10, 0, 90)
+lastReceivedLabel.Size = UDim2.new(0, 200, 0, 25)
+lastReceivedLabel.BackgroundTransparency = 1
+lastReceivedLabel.Text = "Last received pet: 0s"
+lastReceivedLabel.TextColor3 = Color3.fromRGB(200,200,200)
+lastReceivedLabel.Font = Enum.Font.Gotham
+lastReceivedLabel.TextScaled = true
+lastReceivedLabel.TextXAlignment = Enum.TextXAlignment.Left
+lastReceivedLabel.Parent = mainFrame
+
+-- Progress bar
+local progressLabel = Instance.new("TextLabel")
+progressLabel.Position = UDim2.new(0, 10, 0, 120)
+progressLabel.Size = UDim2.new(0, 360, 0, 20)
+progressLabel.BackgroundTransparency = 1
+progressLabel.Text = ""
+progressLabel.Parent = mainFrame
+
+local progressBackground = Instance.new("Frame")
+progressBackground.Position = UDim2.new(0, 10, 0, 145)
+progressBackground.Size = UDim2.new(0, 360, 0, 20)
+progressBackground.BackgroundColor3 = Color3.fromRGB(50,50,50)
+progressBackground.BorderSizePixel = 0
+progressBackground.Parent = mainFrame
+progressBackground.ClipsDescendants = true
+progressBackground.AnchorPoint = Vector2.new(0,0)
+progressBackground.BackgroundTransparency = 0
+progressBackground.Name = "ProgressBG"
+progressBackground.Round = UDim.new(0,10)
+
+local progressFill = Instance.new("Frame")
+progressFill.Size = UDim2.new(0,0,1,0)
+progressFill.BackgroundColor3 = Color3.fromRGB(0,255,128)
+progressFill.BorderSizePixel = 0
+progressFill.Parent = progressBackground
+progressFill.Round = UDim.new(0,10)
+
+-- Search bar
+local searchBox = Instance.new("TextBox")
+searchBox.Position = UDim2.new(0, 10, 0, 180)
+searchBox.Size = UDim2.new(0, 360, 0, 30)
+searchBox.PlaceholderText = "Search pets..."
+searchBox.BackgroundColor3 = Color3.fromRGB(35,35,35)
+searchBox.TextColor3 = Color3.fromRGB(255,255,255)
+searchBox.Font = Enum.Font.Gotham
+searchBox.TextScaled = true
+searchBox.BorderSizePixel = 0
+searchBox.ClearTextOnFocus = false
+searchBox.Parent = mainFrame
+
+-- Scrolling frame for pets
+local petList = Instance.new("ScrollingFrame")
+petList.Position = UDim2.new(0, 10, 0, 220)
+petList.Size = UDim2.new(0, 360, 0, 260)
+petList.CanvasSize = UDim2.new(0, 0, 0, 0)
+petList.ScrollBarThickness = 6
+petList.BackgroundTransparency = 1
+petList.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0,5)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = petList
+
+-- Helper functions
+local specialPets = {
+    ["Kitsune"] = "🌸",
+    ["Raccoon"] = "🦝",
+    ["Disco Bee"] = "🪩",
+    ["Dragonfly"] = "🐉",
+    ["Queen Bee"] = "🐝",
+    ["Red Fox"] = "🦊"
+}
+
+local function parsePetData(tool)
+    local name = tool.Name
+    local emoji = specialPets[name] or "🐾"
+    local weight = name:match("(%d+KG)") or "N/A"
+    local age = name:match("(%d+Age)") or "N/A"
+    return emoji, weight, age
+end
+
+local function updatePetList()
+    local filter = searchBox.Text:lower()
+    local pets = {}
+    for _, tool in pairs(Backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+            if tool.Name:lower():find(filter) then
+                table.insert(pets, tool)
+            end
+        end
+    end
+
+    -- Clear existing
+    for _, child in pairs(petList:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+
+    for i, tool in ipairs(pets) do
+        local emoji, weight, age = parsePetData(tool)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1,0,0,40)
+        row.BackgroundColor3 = Color3.fromHSV(i/#pets,0.6,0.9)
+        row.BorderSizePixel = 0
+        row.Round = UDim.new(0,8)
+        row.Parent = petList
+
+        -- Emoji
+        local icon = Instance.new("TextLabel")
+        icon.Size = UDim2.new(0,30,1,0)
+        icon.Position = UDim2.new(0,5,0,0)
+        icon.BackgroundTransparency = 1
+        icon.Text = emoji
+        icon.TextScaled = true
+        icon.Font = Enum.Font.GothamBold
+        icon.TextColor3 = Color3.fromRGB(255,255,255)
+        icon.Parent = row
+
+        -- Name label
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(0,100,1,0)
+        nameLabel.Position = UDim2.new(0,45,0,0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = tool.Name
+        nameLabel.TextScaled = true
+        nameLabel.Font = Enum.Font.Gotham
+        nameLabel.TextColor3 = Color3.fromRGB(255,255,255)
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = row
+
+        -- Weight
+        local weightLabel = Instance.new("TextLabel")
+        weightLabel.Size = UDim2.new(0,60,1,0)
+        weightLabel.Position = UDim2.new(0,150,0,0)
+        weightLabel.BackgroundTransparency = 1
+        weightLabel.Text = weight
+        weightLabel.TextScaled = true
+        weightLabel.Font = Enum.Font.Gotham
+        weightLabel.TextColor3 = Color3.fromRGB(255,255,255)
+        weightLabel.Parent = row
+
+        -- Age
+        local ageLabel = Instance.new("TextLabel")
+        ageLabel.Size = UDim2.new(0,60,1,0)
+        ageLabel.Position = UDim2.new(0,220,0,0)
+        ageLabel.BackgroundTransparency = 1
+        ageLabel.Text = age
+        ageLabel.TextScaled = true
+        ageLabel.Font = Enum.Font.Gotham
+        ageLabel.TextColor3 = Color3.fromRGB(255,255,255)
+        ageLabel.Parent = row
+
+        -- Small color dot indicator
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.new(0,15,0,15)
+        dot.Position = UDim2.new(1,-20,0.5,-7)
+        dot.BackgroundColor3 = Color3.fromHSV(i/#pets,0.9,0.9)
+        dot.Parent = row
+        dot.Round = UDim.new(0,7)
+    end
+
+    -- Update canvas size
+    petList.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y)
+    
+    -- Update progress
+    progressLabel.Text = #pets.."/60 Pets"
+    progressFill:TweenSize(UDim2.new(math.clamp(#pets/60,0,1),0,1,0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.3, true)
+end
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(updatePetList)
+Backpack.ChildAdded:Connect(updatePetList)
+Backpack.ChildRemoved:Connect(updatePetList)
+
+-- Last received timer
+local lastReceived = 0
+local function updateLastReceived(dt)
+    lastReceived = lastReceived + dt
+    lastReceivedLabel.Text = string.format("Last received pet: %.0fs", lastReceived)
+end
+
+-- Reset timer when pet added
+Backpack.ChildAdded:Connect(function(child)
+    if child:IsA("Tool") and child:GetAttribute("ItemType") == "Pet" then
+        lastReceived = 0
+    end
+end)
+
+RunService.RenderStepped:Connect(updateLastReceived)
+
+-- Initial update
+updatePetList()
